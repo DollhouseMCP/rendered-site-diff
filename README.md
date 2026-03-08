@@ -31,6 +31,26 @@ Open:
 
 - `http://127.0.0.1:4310`
 
+## One-command local launcher
+
+Install the launcher once:
+
+```bash
+./scripts/install-local-launcher.sh
+```
+
+Then run from any repo:
+
+```bash
+visidelta
+```
+
+Or target a specific repo path:
+
+```bash
+visidelta /path/to/repo
+```
+
 ## Usage
 
 ```bash
@@ -63,6 +83,21 @@ Available env vars inside build commands:
 - Changed pages are inferred from changed `*.md` files by default.
 - Excludes include `README.md`, `LICENSE`, `docs/*`, `scripts/*`, `.github/*`.
 - Add extra excludes with `EXTRA_EXCLUDE_GLOBS`.
+
+## CI
+
+- `shellcheck` runs against all shipped shell scripts.
+- A smoke test creates a temporary git fixture repo and validates generated output.
+
+## GitHub Pages
+
+Yes, but with one constraint: VisiDelta itself is a build-time tool, so GitHub Pages can host generated output for a specific run, not run comparisons dynamically in-browser.
+
+Typical setup:
+
+1. Run VisiDelta in CI for a target repo/branch pair.
+2. Publish the generated `/tmp/visidelta` output as a Pages artifact.
+3. Browse static compare output on Pages.
 
 ## License
 

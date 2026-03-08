@@ -95,6 +95,7 @@ fi
 is_excluded() {
   local file="$1"
   for glob in "${EXCLUDE_GLOBS[@]}"; do
+    # shellcheck disable=SC2053
     if [[ "$file" == $glob ]]; then
       return 0
     fi
