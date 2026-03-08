@@ -31,6 +31,30 @@ Open:
 
 - `http://127.0.0.1:4310`
 
+## GitHub Action quick start
+
+Use VisiDelta directly in workflows:
+
+```yaml
+- uses: DollhouseMCP/visidelta@main
+  with:
+    base_ref: origin/main
+    out_dir: /tmp/visidelta
+    mode: build
+```
+
+For non-Jekyll projects, pass custom build commands:
+
+```yaml
+- uses: DollhouseMCP/visidelta@main
+  with:
+    base_ref: origin/main
+    out_dir: /tmp/visidelta
+    mode: build
+    build_old_cmd: npm ci && npm run build && cp -R dist/. "$DEST_DIR"
+    build_new_cmd: npm ci && npm run build && cp -R dist/. "$DEST_DIR"
+```
+
 ## One-command local launcher
 
 Install the launcher once:
@@ -61,6 +85,17 @@ visidelta.sh [BASE_REF] [OUT_DIR] [MODE] [TARGET_REPO]
 - `OUT_DIR`: output directory for generated diff site (default `/tmp/visidelta`)
 - `MODE`: `build` or `serve` (default `build`)
 - `TARGET_REPO`: repo path to diff (default `.`)
+
+## Action inputs
+
+- `base_ref`: compare base ref (default `origin/main`)
+- `out_dir`: output directory (default `/tmp/visidelta`)
+- `mode`: `build` or `serve` (default `build`)
+- `target_repo`: target repository path (default `.`)
+- `build_old_cmd`: optional custom base build command
+- `build_new_cmd`: optional custom current build command
+- `extra_exclude_globs`: extra file globs to exclude from route list
+- `port`: serve port when `mode=serve` (default `4310`)
 
 ## Custom build commands
 
@@ -98,6 +133,8 @@ Typical setup:
 1. Run VisiDelta in CI for a target repo/branch pair.
 2. Publish the generated `/tmp/visidelta` output as a Pages artifact.
 3. Browse static compare output on Pages.
+
+An example workflow is included at [`docs/examples/pages-preview.yml`](docs/examples/pages-preview.yml).
 
 ## License
 

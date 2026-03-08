@@ -27,3 +27,54 @@ jobs:
         uses: actions/checkout@v4
       - name: Run smoke test
         run: ./tests/smoke.sh
+
+  action-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Build fixture repo
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/visidelta-ci-fixture
+          git -C /tmp/visidelta-ci-fixture init -b main
+          git -C /tmp/visidelta-ci-fixture config user.name visidelta-ci
+          git -C /tmp/visidelta-ci-fixture config user.email visidelta-ci@example.com
+          cat > /tmp/visidelta-ci-fixture/index.md <<'MD'
+          # Home
+
+          Base content.
+          MD
+          cat > /tmp/visidelta-ci-fixture/about.md <<'MD'
+          # About
+
+          About base content.
+          MD
+          git -C /tmp/visidelta-ci-fixture add .
+          git -C /tmp/visidelta-ci-fixture commit -m "base"
+          cat > /tmp/visidelta-ci-fixture/index.md <<'MD'
+          # Home
+
+          Updated content for action smoke.
+          MD
+          git -C /tmp/visidelta-ci-fixture add index.md
+          git -C /tmp/visidelta-ci-fixture commit -m "update"
+      - name: Run local composite action
+        uses: ./
+        with:
+          base_ref: HEAD~1
+          out_dir: /tmp/visidelta-action-out
+          mode: build
+          target_repo: /tmp/visidelta-ci-fixture
+          build_old_cmd: mkdir -p "$DEST_DIR"; cp "$SRC_DIR/index.md" "$DEST_DIR/index.html"; mkdir -p "$DEST_DIR/about"; cp "$SRC_DIR/about.md" "$DEST_DIR/about/index.html"
+          build_new_cmd: mkdir -p "$DEST_DIR"; cp "$SRC_DIR/index.md" "$DEST_DIR/index.html"; mkdir -p "$DEST_DIR/about"; cp "$SRC_DIR/about.md" "$DEST_DIR/about/index.html"
+      - name: Verify action output
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f /tmp/visidelta-action-out/index.html
+          test -f /tmp/visidelta-action-out/viewer.html
+          test -f /tmp/visidelta-action-out/routes.json

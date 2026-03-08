@@ -1,0 +1,57 @@
+name: VisiDelta
+
+description: Visual old-vs-new rendered diff for static websites
+
+author: DollhouseMCP
+
+inputs:
+  base_ref:
+    description: Git ref to compare against
+    required: false
+    default: origin/main
+  out_dir:
+    description: Output directory for generated compare site
+    required: false
+    default: /tmp/visidelta
+  mode:
+    description: build or serve
+    required: false
+    default: build
+  target_repo:
+    description: Path to target repository
+    required: false
+    default: .
+  build_old_cmd:
+    description: Optional custom build command for base snapshot
+    required: false
+    default: ''
+  build_new_cmd:
+    description: Optional custom build command for current snapshot
+    required: false
+    default: ''
+  extra_exclude_globs:
+    description: Extra markdown path globs to exclude from changed-page routing
+    required: false
+    default: ''
+  port:
+    description: Port used when mode=serve
+    required: false
+    default: '4310'
+
+runs:
+  using: composite
+  steps:
+    - name: Run VisiDelta
+      shell: bash
+      env:
+        BUILD_OLD_CMD: ${{ inputs.build_old_cmd }}
+        BUILD_NEW_CMD: ${{ inputs.build_new_cmd }}
+        EXTRA_EXCLUDE_GLOBS: ${{ inputs.extra_exclude_globs }}
+        PORT: ${{ inputs.port }}
+      run: |
+        set -euo pipefail
+        "${{ github.action_path }}/scripts/build-rendered-diff-viewer.sh" \
+          "${{ inputs.base_ref }}" \
+          "${{ inputs.out_dir }}" \
+          "${{ inputs.mode }}" \
+          "${{ inputs.target_repo }}"
