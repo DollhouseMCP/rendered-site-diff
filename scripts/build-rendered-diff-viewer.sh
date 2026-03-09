@@ -36,9 +36,12 @@ build_with_default_jekyll() {
   local dest_dir="$2"
   local label="$3"
   local baseurl="$4"
+  local uid_gid
+  uid_gid="$(id -u):$(id -g)"
 
   echo "Building $label site with jekyll/jekyll:pages ..."
   docker run --rm \
+    --user "$uid_gid" \
     -v "$src_dir":/srv/jekyll \
     -v "$dest_dir":/out \
     jekyll/jekyll:pages \
@@ -76,21 +79,6 @@ build_site() {
 build_site "$MAIN_SRC" "$OLD_DIR" "base" "/old" "${BUILD_OLD_CMD:-}"
 build_site "$REPO_ROOT" "$NEW_DIR" "current" "/new" "${BUILD_NEW_CMD:-${BUILD_OLD_CMD:-}}"
 
-normalize_build_output_permissions() {
-  local site_dir="$1"
-  local tmp_dir="${site_dir}.rw"
-  rm -rf "$tmp_dir"
-  mkdir -p "$tmp_dir"
-  cp -R "$site_dir"/. "$tmp_dir"/
-  rm -rf "$site_dir"
-  mv "$tmp_dir" "$site_dir"
-}
-
-# Build output ownership/permissions vary by container/runtime.
-# Re-copy output to a user-owned tree so post-processing is always writable.
-normalize_build_output_permissions "$OLD_DIR"
-normalize_build_output_permissions "$NEW_DIR"
-
 rewrite_prefixed_links_relative() {
   local site_dir="$1"
   local segment="$2"
@@ -110,7 +98,7 @@ rewrite_prefixed_links_relative() {
       done
     fi
     NEEDLE="$needle" REPL="$prefix" perl -0pi -e 's/\Q$ENV{NEEDLE}\E/$ENV{REPL}/g;' "$html_file"
-  done < <(find "$site_dir" -type f -name "*.html" -print0)
+  done < <(grep -rIlZ -- "$needle" "$site_dir")
 }
 
 # Hosted previews often live under nested paths. Convert absolute /old/... and
@@ -281,9 +269,11 @@ cat >"$OUT_DIR/viewer.html" <<'HTML'
       .bar strong { margin-right: 0.4rem; }
       .bar code { background: #eef2ff; padding: 0.12rem 0.35rem; border-radius: 0.28rem; }
       .btn { border: 1px solid var(--line); border-radius: 0.35rem; background: #fff; color: var(--text); padding: 0.25rem 0.5rem; cursor: pointer; font-size: 0.9rem; text-decoration: none; }
+      .btn[disabled] { opacity: 0.45; cursor: not-allowed; }
       .btn.active { background: #1d4ed8; color: #fff; border-color: #1d4ed8; }
       .btn.toggle-on { background: #1d4ed8; color: #fff; border-color: #1d4ed8; }
       .diff-meta { color: var(--muted); font-size: 0.84rem; white-space: nowrap; }
+      .page-meta { color: var(--muted); font-size: 0.84rem; white-space: nowrap; }
       .hint { margin-left: auto; color: var(--muted); font-size: 0.86rem; }
       .stage { display: grid; gap: 0; min-height: 0; }
       .stage.split { grid-template-columns: 1fr 1fr; }
@@ -313,6 +303,9 @@ cat >"$OUT_DIR/viewer.html" <<'HTML'
       <section class="compare">
         <div class="bar">
           <strong>Route</strong> <code id="route"></code>
+          <button class="btn" id="prevBtn" type="button" title="Previous page (Left Arrow)">Prev</button>
+          <button class="btn" id="nextBtn" type="button" title="Next page (Right Arrow)">Next</button>
+          <span class="page-meta" id="pageMeta">Page 0 of 0</span>
           <button class="btn active" id="splitBtn" type="button">Split</button>
           <button class="btn" id="oldBtn" type="button">Old only</button>
           <button class="btn" id="newBtn" type="button">New only</button>
@@ -342,6 +335,9 @@ cat >"$OUT_DIR/viewer.html" <<'HTML'
       const newFrame = document.getElementById("newFrame");
       const oldLink = document.getElementById("oldLink");
       const newLink = document.getElementById("newLink");
+      const prevBtn = document.getElementById("prevBtn");
+      const nextBtn = document.getElementById("nextBtn");
+      const pageMeta = document.getElementById("pageMeta");
       const stage = document.getElementById("stage");
       const labels = document.getElementById("labels");
       const splitBtn = document.getElementById("splitBtn");
@@ -364,6 +360,32 @@ cat >"$OUT_DIR/viewer.html" <<'HTML'
       let showDels = true;
       let showMoved = false;
       const diffCache = {};
+
+      function currentIndex() {
+        return pages.findIndex((p) => normalizeRoute(p.route) === currentRoute);
+      }
+
+      function refreshPageMeta() {
+        if (!pages.length) {
+          pageMeta.textContent = "Page 0 of 0";
+          prevBtn.disabled = true;
+          nextBtn.disabled = true;
+          return;
+        }
+        const idx = currentIndex();
+        const pageNum = idx >= 0 ? idx + 1 : 1;
+        pageMeta.textContent = `Page ${pageNum} of ${pages.length}`;
+        prevBtn.disabled = idx <= 0;
+        nextBtn.disabled = idx < 0 || idx >= pages.length - 1;
+      }
+
+      function goRelative(delta) {
+        const idx = currentIndex();
+        if (idx < 0) return;
+        const next = idx + delta;
+        if (next < 0 || next >= pages.length) return;
+        updateRoute(pages[next].route);
+      }
 
       function normalizeRoute(path) {
         if (!path) return "/";
@@ -610,6 +632,7 @@ cat >"$OUT_DIR/viewer.html" <<'HTML'
         url.searchParams.set("path", currentRoute);
         history.replaceState({}, "", url.toString());
         renderRouteList();
+        refreshPageMeta();
         const diff = await loadDiffForPage(currentPage);
         currentAdds = diff.additions;
         currentDels = diff.deletions;
@@ -671,6 +694,19 @@ cat >"$OUT_DIR/viewer.html" <<'HTML'
         showMoved = !showMoved;
         setToggle(moveBtn, showMoved);
         applyHighlights();
+      });
+      prevBtn.addEventListener("click", () => goRelative(-1));
+      nextBtn.addEventListener("click", () => goRelative(1));
+      window.addEventListener("keydown", (event) => {
+        if (event.defaultPrevented) return;
+        if (event.altKey || event.ctrlKey || event.metaKey) return;
+        const targetTag = (event.target && event.target.tagName) ? event.target.tagName.toLowerCase() : "";
+        if (targetTag === "input" || targetTag === "textarea" || targetTag === "select") return;
+        if (event.key === "ArrowLeft") {
+          goRelative(-1);
+        } else if (event.key === "ArrowRight") {
+          goRelative(1);
+        }
       });
       oldFrame.addEventListener("load", applyHighlights);
       newFrame.addEventListener("load", applyHighlights);
