@@ -277,8 +277,9 @@ cat >"$OUT_DIR/viewer.html" <<'HTML'
       .diff-meta { color: var(--muted); font-size: 0.84rem; white-space: nowrap; }
       .page-meta { color: var(--muted); font-size: 0.84rem; white-space: nowrap; }
       .hint { margin-left: auto; color: var(--muted); font-size: 0.86rem; }
-      .stage { display: grid; gap: 0; min-height: 0; }
+      .stage { display: grid; gap: 0; min-height: 0; grid-template-columns: minmax(0, 1fr); }
       .stage.split { grid-template-columns: 1fr 1fr; }
+      .old-pane, .new-pane { min-width: 0; }
       iframe { width: 100%; height: 100%; border: 0; background: #fff; }
       .single .new-pane, .single-old .new-pane, .single-new .old-pane { display: none; }
       .single .old-pane, .single-old .old-pane, .single-new .new-pane { display: block; }
